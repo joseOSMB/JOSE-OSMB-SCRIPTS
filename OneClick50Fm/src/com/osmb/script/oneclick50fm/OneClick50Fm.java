@@ -37,6 +37,9 @@ import com.osmb.api.trackers.experience.XPTracker;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.awt.*;
 import java.util.*;
@@ -49,7 +52,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
 
-@ScriptDefinition(name = "1 Click 50FM", description = "1-50fm with one click", version = 1.0, author = "Jose", skillCategory = SkillCategory.WOODCUTTING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.0, author = "Jose", skillCategory = SkillCategory.WOODCUTTING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -103,6 +106,8 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
 
+    private final String scriptVersion = "1.0";
+
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
         bonfireArea = BONFIRE_AREA;
@@ -110,6 +115,16 @@ public class OneClick50Fm extends Script {
         this.wcTracker = new SkillTracker((ScriptCore) scriptCore, 214);
         this.fmTracker = new SkillTracker((ScriptCore) scriptCore, 213);
 
+    }
+
+    @Override
+    public void onStart() {
+
+        if (!checkForUpdates()) {
+            log("SYSTEM", "Outdated version.");
+            stop();
+            return;
+        }
     }
 
     @Override
@@ -174,7 +189,7 @@ public class OneClick50Fm extends Script {
                     getWidgetManager().getInventory().unSelectItemIfSelected();
                 }
                 ensureSelectedTree();
-                return Task.chop_Trees;
+                return Task.CHOP_TREES;
             }
 
             phase = Phase.BURN;
@@ -192,7 +207,7 @@ public class OneClick50Fm extends Script {
                     getWidgetManager().getInventory().unSelectItemIfSelected();
                 }
                 ensureSelectedTree();
-                return Task.chop_Trees;
+                return Task.CHOP_TREES;
             }
 
             if (bonfirePosition != null && !isBonfireAlive()) {
@@ -239,7 +254,7 @@ public class OneClick50Fm extends Script {
 
         // Fallback
         ensureSelectedTree();
-        return Task.chop_Trees;
+        return Task.CHOP_TREES;
     }
 
     private void chopTrees() {
@@ -408,7 +423,7 @@ public class OneClick50Fm extends Script {
 
             case CHECK_INIT_LEVELS -> performInitialLevelCheck();
 
-            case chop_Trees -> chopTrees();
+            case CHOP_TREES -> chopTrees();
 
             case START_BONFIRE -> {
                 log(getClass().getSimpleName(), "Lighting bonfire...");
@@ -1130,7 +1145,7 @@ public class OneClick50Fm extends Script {
 
     enum Task {
         CHECK_INIT_LEVELS,
-        chop_Trees,
+        CHOP_TREES,
         START_BONFIRE,
         BURN_LOGS,
         HANDLE_DIALOGUE,
@@ -1376,5 +1391,58 @@ public class OneClick50Fm extends Script {
         long minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60;
         long seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    public static int compareVersions(String v1, String v2) {
+        String[] a = v1.split("\\.");
+        String[] b = v2.split("\\.");
+        int len = Math.max(a.length, b.length);
+        for (int i = 0; i < len; i++) {
+            int n1 = i < a.length ? Integer.parseInt(a[i]) : 0;
+            int n2 = i < b.length ? Integer.parseInt(b[i]) : 0;
+            if (n1 != n2) return Integer.compare(n1, n2);
+        }
+        return 0;
+    }
+
+    private boolean checkForUpdates() {
+        String url = ("https://raw.githubusercontent.com/joseOSMB/JOSE-OSMB-SCRIPTS/refs/heads/main/DragonKillerPro/version.txt");
+        String latest = getLatestVersion(url);
+        if (latest == null) {
+            log("VERSION", "Can't verify the version.");
+            return true;
+        }
+
+        if (compareVersions(scriptVersion, latest) < 0) {
+            log("VERSION", "❌ New version v" + latest + " detected!");
+            log("VERSION", "Please update you script in GitHub.");
+            log("VERSION","https://github.com/joseOSMB/JOSE-OSMB-SCRIPTS/blob/main/DragonKillerPro/dragonkill.jar");
+            return false;
+        }
+
+        log("VERSION", "✅ You have the lastest version (v" + scriptVersion + ").");
+        return true;
+    }
+
+    private String getLatestVersion(String url) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestMethod("GET");
+            c.setConnectTimeout(3000);
+            c.setReadTimeout(3000);
+            c.setUseCaches(false);
+
+            if (c.getResponseCode() != 200) return null;
+
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
+                String line = r.readLine();
+                if (line != null && !line.isEmpty()) {
+                    return line.trim();
+                }
+            }
+        } catch (Exception e) {
+            log("VERSION", "Error searching update: " + e.getMessage());
+        }
+        return null;
     }
 }
