@@ -1243,7 +1243,7 @@ public class OneClick50Fm extends Script {
 
         int x = 15, y = 35;
         int panelW = 320;
-        int panelH = 250;
+        int panelH = 270;
         int padding = 15;
 
         int COL_BG = new Color(12, 12, 18, 240).getRGB();
@@ -1262,11 +1262,14 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
+        drawRow(c, "Version:", "v1.0", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        cursorY += 20;
+
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
         cursorY += 20;
 
         String taskName = (task != null) ? task.name() : "IDLE";
-        drawRow(c, "Status:", taskName, x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Task:", taskName, x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         String treeName = (selectedTree != null) ? selectedTree.getObjectName() : "None";
