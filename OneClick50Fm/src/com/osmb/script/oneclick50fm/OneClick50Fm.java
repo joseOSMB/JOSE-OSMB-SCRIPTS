@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.0, author = "Jose", skillCategory = SkillCategory.WOODCUTTING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.0, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -1448,4 +1448,5 @@ public class OneClick50Fm extends Script {
         }
         return null;
     }
+
 }
