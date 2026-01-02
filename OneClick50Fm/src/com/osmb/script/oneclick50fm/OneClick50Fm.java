@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.0, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.01, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -106,7 +106,7 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
 
-    private final String scriptVersion = "1.0";
+    private final String scriptVersion = "1.01";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
@@ -220,8 +220,8 @@ public class OneClick50Fm extends Script {
                     if (!getWidgetManager().getInventory().unSelectItemIfSelected()) return null;
                 }
 
-                if (System.currentTimeMillis() - bonfireSearchStart > 5000) {
-                    log(getClass().getSimpleName(), "5s timeout trying to reach area. Forcing random position.");
+                if (System.currentTimeMillis() - bonfireSearchStart > 20000) {
+                    log(getClass().getSimpleName(), "20s timeout trying to reach area. Forcing random position.");
                     forceNewPosition = true;
                     bonfireSearchStart = System.currentTimeMillis(); // Reset timer
                     return Task.MOVE_LIGHT_POSITION;
@@ -1231,6 +1231,21 @@ public class OneClick50Fm extends Script {
     }
 
     @Override
+    public boolean canHopWorlds() {
+        return phase != Phase.BURN;
+    }
+
+    @Override
+    public boolean canAFK() {
+        return phase != Phase.BURN;
+    }
+
+    @Override
+    public boolean canBreak() {
+        return phase != Phase.BURN;
+    }
+
+    @Override
     public void onPaint(Canvas c) {
         //draw bonfire
         if (bonfirePosition != null) {
@@ -1262,7 +1277,7 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.0", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.01", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
@@ -1448,5 +1463,4 @@ public class OneClick50Fm extends Script {
         }
         return null;
     }
-
 }
