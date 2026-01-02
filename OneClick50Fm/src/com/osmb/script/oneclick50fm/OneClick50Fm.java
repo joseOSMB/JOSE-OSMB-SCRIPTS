@@ -1406,7 +1406,7 @@ public class OneClick50Fm extends Script {
     }
 
     private boolean checkForUpdates() {
-        String url = ("https://raw.githubusercontent.com/joseOSMB/JOSE-OSMB-SCRIPTS/refs/heads/main/DragonKillerPro/version.txt");
+        String url = ("https://raw.githubusercontent.com/joseOSMB/JOSE-OSMB-SCRIPTS/refs/heads/main/OneClick50Fm/version.txt");
         String latest = getLatestVersion(url);
         if (latest == null) {
             log("VERSION", "Can't verify the version.");
@@ -1416,7 +1416,7 @@ public class OneClick50Fm extends Script {
         if (compareVersions(scriptVersion, latest) < 0) {
             log("VERSION", "❌ New version v" + latest + " detected!");
             log("VERSION", "Please update you script in GitHub.");
-            log("VERSION","https://github.com/joseOSMB/JOSE-OSMB-SCRIPTS/blob/main/DragonKillerPro/dragonkill.jar");
+            log("VERSION","https://github.com/joseOSMB/JOSE-OSMB-SCRIPTS/tree/main/OneClick50Fm/jar");
             return false;
         }
 
