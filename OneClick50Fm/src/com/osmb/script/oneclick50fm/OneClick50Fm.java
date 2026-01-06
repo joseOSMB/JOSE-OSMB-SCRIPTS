@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.01, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.02, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -106,7 +106,7 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
 
-    private final String scriptVersion = "1.01";
+    private final String scriptVersion = "1.02";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
@@ -532,32 +532,73 @@ public class OneClick50Fm extends Script {
         getWalker().walkTo(selectedTree.getTreeArea().getRandomPosition(), b.build());
     }
 
-    private boolean ensureSelectedTree() {
-        int currentLevel = 0;
+    private int getRequiredFmLevel(int logId) {
+        if (logId == ItemID.LOGS) return 1;
+        if (logId == ItemID.OAK_LOGS) return 15;
+        if (logId == ItemID.WILLOW_LOGS) return 30;
 
+        return 99;
+    }
+
+    private Set<Integer> getBurnableLogs(ItemGroupResult inventorySnapshot) {
+
+        int fmLevel = 0;
+        if (fmTracker != null && fmTracker.getTracker() != null) {
+            fmLevel = fmTracker.getTracker().getLevel();
+        }
+
+        if (fmLevel == 0) fmLevel = Math.max(1, cachedFmLevel);
+
+        Set<Integer> validIds = new HashSet<>();
+
+        for (int logId : LOGS) {
+
+            if (inventorySnapshot.contains(logId)) {
+
+                if (fmLevel >= getRequiredFmLevel(logId)) {
+                    validIds.add(logId);
+                }
+            }
+        }
+        return validIds;
+    }
+
+    private boolean ensureSelectedTree() {
+        int currentWcLevel = 0;
         if (wcTracker != null) {
             XPTracker tracker = wcTracker.getTracker();
             if (tracker != null) {
-                currentLevel = tracker.getLevel();
+                currentWcLevel = tracker.getLevel();
             }
         }
-
-        if (currentLevel == 0) {
-            currentLevel = cachedWcLevel;
+        if (currentWcLevel == 0) {
+            currentWcLevel = cachedWcLevel;
         }
 
-        if (currentLevel <= 0) return false;
+        int currentFmLevel = 0;
+        if (fmTracker != null) {
+            XPTracker tracker = fmTracker.getTracker();
+            if (tracker != null) {
+                currentFmLevel = tracker.getLevel();
+            }
+        }
+        if (currentFmLevel == 0) {
+            currentFmLevel = cachedFmLevel;
+        }
 
-        Tree optimal = Tree.getTreeForLevel(currentLevel);
+        if (currentWcLevel <= 0 || currentFmLevel <= 0) return false;
+
+        int limitingLevel = Math.min(currentWcLevel, currentFmLevel);
+
+        Tree optimal = Tree.getTreeForLevel(limitingLevel);
 
         if (optimal == null) optimal = Tree.NORMAL;
 
         if (selectedTree != optimal) {
-            log(OneClick50Fm.class, "LEVEL UP (Tracker: " + currentLevel + ")! Switching: " +
+            log(OneClick50Fm.class, "SYNC LEVEL UP (WC: " + currentWcLevel + ", FM: " + currentFmLevel + ")! Switching: " +
                     (selectedTree == null ? "None" : selectedTree.getObjectName()) + " -> " + optimal.getObjectName());
 
             selectedTree = optimal;
-
             lastOffscreenTarget = null;
             firstBack = true;
 
@@ -690,28 +731,31 @@ public class OneClick50Fm extends Script {
 
     private void handleDialogue() {
         if (!isDialogueVisible()) return;
-        // Search the inventory for any valid log from the LOGS list.
-        ItemGroupResult inv = getWidgetManager().getInventory()
-                .search(Arrays.stream(LOGS).boxed().collect(java.util.stream.Collectors.toSet()));
-        if (inv == null) {
-            log(getClass().getSimpleName(), "Inventory not visible.");
+
+        ItemGroupResult inv = getWidgetManager().getInventory().search(getMonitoredIds());
+        if (inv == null) return;
+
+        Set<Integer> validBurnableIds = getBurnableLogs(inv);
+
+        if (validBurnableIds.isEmpty()) {
+            log(getClass().getSimpleName(), "No valid logs for FM level in dialogue.");
             return;
         }
-        // Choose any one of the ones you have (if you don't have any, there's nothing to burn).
-        ItemSearchResult logItem = inv.getRandomItem(LOGS);
-        if (logItem == null) {
-            log(getClass().getSimpleName(), "No logs in inventory to select.");
-            return;
-        }
-        if (!isDialogueVisible()) return;
+
+        ItemSearchResult logItem = inv.getRandomItem(validBurnableIds);
+
+        if (logItem == null) return;
 
         boolean ok = getWidgetManager().getDialogue().selectItem(logItem.getId());
         if (!ok) {
             log(getClass().getSimpleName(), "Failed to select item in dialogue.");
             return;
         }
+
         this.task = Task.BURN_LOGS;
-        waitUntilFinishedBurning(LOGS);
+
+        int[] idsArray = validBurnableIds.stream().mapToInt(Number::intValue).toArray();
+        waitUntilFinishedBurning(idsArray);
     }
 
     private void lightBonfire(ItemSearchResult tinderbox, ItemSearchResult logs) {
@@ -743,11 +787,12 @@ public class OneClick50Fm extends Script {
     }
 
     private boolean hasAnyLogsInInventory() {
-        Set<Integer> idSet = Arrays.stream(LOGS).boxed().collect(Collectors.toSet());
-        ItemGroupResult inv = getWidgetManager().getInventory().search(idSet);
+        ItemGroupResult inv = getWidgetManager().getInventory().search(getMonitoredIds());
+
         if (inv == null) return false;
-        for (int id : LOGS) if (inv.contains(id)) return true;
-        return false;
+
+        Set<Integer> burnable = getBurnableLogs(inv);
+        return !burnable.isEmpty();
     }
 
     private boolean hasTinderbox() {
@@ -762,7 +807,11 @@ public class OneClick50Fm extends Script {
     }
 
     private ItemSearchResult pickAnyLog(ItemGroupResult inv) {
-        return inv.getRandomItem(LOGS);
+        Set<Integer> burnableIds = getBurnableLogs(inv);
+
+        if (burnableIds.isEmpty()) return null;
+
+        return inv.getRandomItem(burnableIds);
     }
 
     private void moveToNewPosition() {
@@ -981,19 +1030,29 @@ public class OneClick50Fm extends Script {
     }
 
     public boolean interactAndWaitForDialogue(ItemGroupResult inventorySnapshot) {
-        ItemSearchResult log = null;
+        Set<Integer> validBurnableIds = getBurnableLogs(inventorySnapshot);
+
+        if (validBurnableIds.isEmpty()) {
+            log(getClass().getSimpleName(), "No logs found that match your Firemaking level.");
+            return true;
+        }
+
+        ItemSearchResult logToUse = null;
 
         if (inventorySnapshot.getSelectedSlot() != null) {
-            log = getSelectedLog();
-
-            if (log == null && !getWidgetManager().getInventory().unSelectItemIfSelected()) {
-                return true;
+            ItemSearchResult selected = getSelectedLog();
+            if (selected != null && validBurnableIds.contains(selected.getId())) {
+                logToUse = selected;
+            } else {
+                getWidgetManager().getInventory().unSelectItemIfSelected();
             }
         }
-        if (log == null) {
-            log = inventorySnapshot.getRandomItem(LOGS);
+
+        if (logToUse == null) {
+            logToUse = inventorySnapshot.getRandomItem(validBurnableIds);
         }
-        if (!log.interact()) {
+
+        if (logToUse == null || !logToUse.interact()) {
             return true;
         }
 
@@ -1277,7 +1336,7 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.01", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.02", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
