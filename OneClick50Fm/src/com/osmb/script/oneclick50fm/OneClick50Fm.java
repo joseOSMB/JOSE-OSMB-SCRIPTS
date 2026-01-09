@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.02, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.03, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -105,8 +105,8 @@ public class OneClick50Fm extends Script {
     private int amountChangeTimeout = 8000;
     private boolean setZoom = false;
     private boolean firstBack = false;
-
-    private final String scriptVersion = "1.02";
+    private boolean stopAt50 = false;
+    private final String scriptVersion = "1.03";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
@@ -125,7 +125,11 @@ public class OneClick50Fm extends Script {
             stop();
             return;
         }
+        UI ui = new UI(this);
+        javafx.scene.Scene scene = new javafx.scene.Scene(ui);
+        this.getStageController().show(scene, "OneClick50FM Settings", true);
     }
+
 
     @Override
     public void onNewFrame() {
@@ -135,6 +139,21 @@ public class OneClick50Fm extends Script {
 
     @Override
     public int poll() {
+        if (this.stopAt50) {
+            int currentLevel = 0;
+            if (fmTracker != null && fmTracker.getTracker() != null) {
+                currentLevel = fmTracker.getTracker().getLevel();
+            }
+
+            if (currentLevel == 0) currentLevel = cachedFmLevel;
+
+            if (currentLevel >= 50) {
+                log("SYSTEM", "Level 50 Firemaking reached! Stopping script as requested.");
+                stop();
+                return 0;
+            }
+        }
+
         WorldPosition worldPosition  = getWorldPosition();
         if (worldPosition == null) {
             log(OneClick50Fm.class, "Position is null");
@@ -1289,6 +1308,11 @@ public class OneClick50Fm extends Script {
         }
     }
 
+    public void initConfiguration(UI ui) {
+        this.stopAt50 = ui.isStopAt50Enabled();
+        log("CONFIG", "Stop at Level 50: " + this.stopAt50);
+    }
+
     @Override
     public boolean canHopWorlds() {
         return phase != Phase.BURN;
@@ -1317,7 +1341,7 @@ public class OneClick50Fm extends Script {
 
         int x = 15, y = 35;
         int panelW = 320;
-        int panelH = 270;
+        int panelH = 290;
         int padding = 15;
 
         int COL_BG = new Color(12, 12, 18, 240).getRGB();
@@ -1336,7 +1360,7 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.02", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.03", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
@@ -1348,6 +1372,12 @@ public class OneClick50Fm extends Script {
 
         String treeName = (selectedTree != null) ? selectedTree.getObjectName() : "None";
         drawRow(c, "Target Tree:", treeName, x + padding, x + 110, cursorY, COL_LABEL, Color.GREEN.getRGB(), fontBold);
+        cursorY += 20;
+
+        String stopStatus = stopAt50 ? "True" : "False";
+
+        int stopColor = stopAt50 ? Color.GREEN.getRGB() : new Color(255, 100, 100).getRGB();
+        drawRow(c, "Stop at 50 FM:", stopStatus, x + padding, x + 110, cursorY, COL_LABEL, stopColor, fontBold);
         cursorY += 25;
 
         XPTracker tWC = (wcTracker != null) ? wcTracker.getTracker() : null;
