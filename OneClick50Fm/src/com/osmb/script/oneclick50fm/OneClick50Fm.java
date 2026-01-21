@@ -1402,6 +1402,14 @@ public class OneClick50Fm extends Script {
 
         drawCenteredText(c, "ONE CLICK 50FM", x + panelW / 2, y + 28, fontTitle, Color.ORANGE.getRGB());
 
+        java.awt.Font fontSignature = new java.awt.Font("Impact", java.awt.Font.ITALIC, 14);
+        int signatureColor = new Color(255, 255, 0).getRGB();
+
+        int sigX = x + (panelW / 2) + 70;
+        int sigY = y + 46;
+
+        c.drawText("By JOSE", sigX, sigY, signatureColor, fontSignature);
+
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
