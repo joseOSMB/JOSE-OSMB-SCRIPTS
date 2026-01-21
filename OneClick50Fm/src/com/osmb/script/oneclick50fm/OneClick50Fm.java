@@ -25,6 +25,7 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.SearchableImage;
 import com.osmb.api.walker.WalkConfig;
+import com.osmb.script.oneclick50fm.data.GlobalStatsManager;
 import com.osmb.script.oneclick50fm.data.Tree;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.utils.timing.Stopwatch;
@@ -34,6 +35,7 @@ import com.osmb.api.ui.chatbox.ChatboxFilterTab;
 import com.osmb.api.profile.WorldProvider;
 import com.osmb.api.profile.ProfileManager;
 import com.osmb.api.trackers.experience.XPTracker;
+import com.osmb.api.location.area.Area;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -50,9 +52,9 @@ import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
-import static com.osmb.script.oneclick50fm.data.AreaManager.BONFIRE_AREA;
+import com.osmb.script.oneclick50fm.data.ScriptLocation;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.03, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.04, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -73,13 +75,13 @@ public class OneClick50Fm extends Script {
     private static final Pattern USE_LOG_TO_FIRE =
             Pattern.compile("^use\\s+(.+?)\\s*->\\s*(fire|forester's campfire)$",
                     Pattern.CASE_INSENSITIVE);
-    private final com.osmb.api.location.area.Area bonfireArea;
 
     private enum Phase { CHOP, BURN }
     private Phase phase = Phase.CHOP;
     private long bonfireSetAtMs = 0L;
     private long bonfireSearchStart = 0L;
 
+    private ScriptLocation selectedLocation;
     private WorldPosition lastOffscreenTarget = null;
     private double lastTargetDistance = Double.MAX_VALUE;
     private int sameTargetTries = 0;
@@ -88,6 +90,7 @@ public class OneClick50Fm extends Script {
 
     private final SkillTracker wcTracker;
     private final SkillTracker fmTracker;
+    private GlobalStatsManager globalStats;
 
     private final Map<String, com.osmb.api.visual.image.Image> paintImages = new HashMap<>();
     private boolean initialLevelsChecked = false;
@@ -106,11 +109,11 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
     private boolean stopAt50 = false;
-    private final String scriptVersion = "1.03";
+    private final String scriptVersion = "1.04";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
-        bonfireArea = BONFIRE_AREA;
+        this.selectedLocation = ScriptLocation.CRAFTING_GUILD;
 
         this.wcTracker = new SkillTracker((ScriptCore) scriptCore, 214);
         this.fmTracker = new SkillTracker((ScriptCore) scriptCore, 213);
@@ -125,11 +128,13 @@ public class OneClick50Fm extends Script {
             stop();
             return;
         }
+        globalStats = new GlobalStatsManager();
+        globalStats.start();
+
         UI ui = new UI(this);
         javafx.scene.Scene scene = new javafx.scene.Scene(ui);
         this.getStageController().show(scene, "OneClick50FM Settings", true);
     }
-
 
     @Override
     public void onNewFrame() {
@@ -139,6 +144,18 @@ public class OneClick50Fm extends Script {
 
     @Override
     public int poll() {
+        if (globalStats != null) {
+            long rTime = System.currentTimeMillis() - startTime;
+            long wXp = (wcTracker != null && wcTracker.getTracker() != null) ? (long) wcTracker.getTracker().getXpGained() : 0;
+            long fXp = (fmTracker != null && fmTracker.getTracker() != null) ? (long) fmTracker.getTracker().getXpGained() : 0;
+
+            int currentFmLevel = (fmTracker != null && fmTracker.getTracker() != null) ? fmTracker.getTracker().getLevel() : cachedFmLevel;
+
+            String locName = (selectedLocation != null) ? selectedLocation.toString() : "Unknown";
+
+            globalStats.updateLocalData(rTime, wXp, fXp, currentFmLevel, locName);
+        }
+
         if (this.stopAt50) {
             int currentLevel = 0;
             if (fmTracker != null && fmTracker.getTracker() != null) {
@@ -154,30 +171,40 @@ public class OneClick50Fm extends Script {
             }
         }
 
-        WorldPosition worldPosition  = getWorldPosition();
+        WorldPosition worldPosition = getWorldPosition();
         if (worldPosition == null) {
             log(OneClick50Fm.class, "Position is null");
             return 0;
         }
 
-        if (wcTracker != null){
+        if (wcTracker != null) {
             wcTracker.ensureCounterActive();
-    }
-
-    if (bonfirePosition != null) {
-        Polygon p = getSceneProjector().getTilePoly(bonfirePosition, true);
-        if (p == null || !getWidgetManager().insideGameScreen(p, java.util.Collections.emptyList())) {
-            bonfirePosition = null;
-            getScreen().removeCanvasDrawable("highlightFireTile");
         }
-    }
+
+        if (bonfirePosition != null) {
+            Polygon p = getSceneProjector().getTilePoly(bonfirePosition, true);
+            if (p == null || !getWidgetManager().insideGameScreen(p, java.util.Collections.emptyList())) {
+                bonfirePosition = null;
+                getScreen().removeCanvasDrawable("highlightFireTile");
+            }
+        }
 
         task = decideTask(worldPosition);
-            if (task == null) {
-                return 0;
+        if (task == null) {
+            return 0;
         }
         executeTask(task);
         return 0;
+    }
+    @Override
+    public boolean stopped() {
+        if (super.stopped()) {
+            if (globalStats != null) {
+                globalStats.stop();
+            }
+            return true;
+        }
+        return false;
     }
 
     private Task decideTask(WorldPosition worldPosition) {
@@ -246,13 +273,14 @@ public class OneClick50Fm extends Script {
                     return Task.MOVE_LIGHT_POSITION;
                 }
 
-                if (bonfireArea != null && !bonfireArea.contains(getWorldPosition())) {
+                Area currentBonfireArea = selectedLocation.getBonfireArea();
 
-                    double distance = bonfireArea.distanceTo(getWorldPosition());
+                if (currentBonfireArea != null && !currentBonfireArea.contains(getWorldPosition())) {
+                    double distance = currentBonfireArea.distanceTo(getWorldPosition());
 
                     if (distance > 2.0) {
-                        WorldPosition target = bonfireArea.getClosestPosition(getWorldPosition());
-                        if (target == null) target = bonfireArea.getRandomPosition();
+                        WorldPosition target = currentBonfireArea.getClosestPosition(getWorldPosition());
+                        if (target == null) target = currentBonfireArea.getRandomPosition();
 
                         if (target != null) {
                             WalkConfig.Builder b = new WalkConfig.Builder();
@@ -290,19 +318,23 @@ public class OneClick50Fm extends Script {
             log(OneClick50Fm.class, "Position is null");
             return;
         }
-        if (!selectedTree.getTreeArea().contains(myPosition)) {
+        Area currentTreeArea = selectedLocation.getAreaForTree(selectedTree);
+
+        if (!currentTreeArea.contains(myPosition)) {
             walkToTreeArea();
             return;
         }
         // get the all the tree's matching the selected tree type
         List<RSObject> trees = getObjectManager().getObjects(rsObject -> {
             String name = rsObject.getName();
-            return name != null && name.equalsIgnoreCase(selectedTree.getObjectName()) && selectedTree.getTreeArea().contains(rsObject.getWorldPosition());
+            return name != null
+                    && name.equalsIgnoreCase(selectedTree.getObjectName())
+                    && currentTreeArea.contains(rsObject.getWorldPosition());
         });
 
         if (trees.isEmpty()) {
             log(OneClick50Fm.class, "Walking to tree area...");
-            getWalker().walkTo(selectedTree.getTreeArea().getRandomPosition());
+            getWalker().walkTo(currentTreeArea.getRandomPosition());
             return;
         }
         // get all selected tree types visible
@@ -310,7 +342,7 @@ public class OneClick50Fm extends Script {
         List<RSObject> activeTrees = getActiveTrees(selectedTree, visibleTrees);
         if (activeTrees.isEmpty()) {
              // If we are outside the area, prioritize entering the area.
-            if (!selectedTree.getTreeArea().contains(myPosition)) {
+            if (!selectedLocation.getAreaForTree(selectedTree).contains(myPosition)) {
                 walkToTreeArea();
                 return;
             }
@@ -351,7 +383,7 @@ public class OneClick50Fm extends Script {
                             WalkConfig.Builder b = new WalkConfig.Builder();
                             b.breakDistance(1);
                             b.tileRandomisationRadius(2);
-                            getWalker().walkTo(selectedTree.getTreeArea().getRandomPosition(), b.build());
+                            getWalker().walkTo(selectedLocation.getAreaForTree(selectedTree).getRandomPosition(), b.build());
 
                             sameTargetTries = 0;
                             lastOffscreenTarget = null;
@@ -371,7 +403,7 @@ public class OneClick50Fm extends Script {
                 log(OneClick50Fm.class, "No trees available; walking to tree area...");
                 WalkConfig.Builder b = new WalkConfig.Builder();
                 b.tileRandomisationRadius(2);
-                getWalker().walkTo(selectedTree.getTreeArea().getRandomPosition(), b.build());
+                getWalker().walkTo(selectedLocation.getAreaForTree(selectedTree).getRandomPosition(), b.build());
             }
             return;
         }
@@ -492,6 +524,8 @@ public class OneClick50Fm extends Script {
     }
 
     private List<RSObject>  getVisibleTrees(List<RSObject> trees, WorldPosition myPosition) {
+        Area currentTreeArea = selectedLocation.getAreaForTree(selectedTree);
+
         return trees.stream()
                 .filter(rsObject -> {
                     WorldPosition position = rsObject.getWorldPosition();
@@ -506,7 +540,7 @@ public class OneClick50Fm extends Script {
                             TREE_BLACKLIST.remove(position);
                         }
                     }
-                    if (!selectedTree.getTreeArea().contains(position)) {
+                    if (!currentTreeArea.contains(rsObject.getWorldPosition())) {
                         return false;
                     }
                     Polygon treePolygon = rsObject.getConvexHull();
@@ -539,16 +573,18 @@ public class OneClick50Fm extends Script {
         WorldPosition me = getWorldPosition();
         if (me == null) return;
 
-        if (selectedTree.getTreeArea().contains(me)) return;
+        Area targetArea = selectedLocation.getAreaForTree(selectedTree);
 
-        log(getClass().getSimpleName(), "Walking to tree area (" + selectedTree.name() + ")...");
+        if (targetArea.contains(me)) return;
+
+        log(getClass().getSimpleName(), "Walking to tree area (" + selectedLocation + ")...");
         WalkConfig.Builder b = new WalkConfig.Builder();
         b.tileRandomisationRadius(2);
         b.breakCondition(() -> {
             WorldPosition p = getWorldPosition();
-            return p != null && selectedTree.getTreeArea().contains(p);
+            return p != null && targetArea.contains(p);
         });
-        getWalker().walkTo(selectedTree.getTreeArea().getRandomPosition(), b.build());
+        getWalker().walkTo(targetArea.getRandomPosition(), b.build());
     }
 
     private int getRequiredFmLevel(int logId) {
@@ -834,8 +870,9 @@ public class OneClick50Fm extends Script {
     }
 
     private void moveToNewPosition() {
+        Area currentBonfireArea = selectedLocation.getBonfireArea();
         // If we have a defined area, we choose a random tile WITHIN that area.
-        if (bonfireArea != null) {
+        if (currentBonfireArea != null) {
             WorldPosition here = getWorldPosition();
             if (here == null) {
                 log(getClass().getSimpleName(), "Position is null.");
@@ -843,8 +880,8 @@ public class OneClick50Fm extends Script {
             }
             // Try to choose a point within the area <= 6 tiles away from the player.
             WorldPosition target = null;
-            for (int i = 0; i < 15; i++) { // up to 15 attempts
-                WorldPosition candidate = bonfireArea.getRandomPosition();
+            for (int i = 0; i < 15; i++) {
+                WorldPosition candidate = currentBonfireArea.getRandomPosition();
                 if (candidate != null && here.distanceTo(candidate) <= 6.0) {
                     target = candidate;
                     break;
@@ -852,7 +889,7 @@ public class OneClick50Fm extends Script {
             }
 
             if (target == null) {
-                target = bonfireArea.getRandomPosition();
+                target = currentBonfireArea.getRandomPosition();
             }
 
             if (target != null) {
@@ -1218,7 +1255,7 @@ public class OneClick50Fm extends Script {
 
     @Override
     public int[] regionsToPrioritise() {
-        return new int[]{11571};
+        return new int[]{11571,12594,12850,12083,12082};
     }
 
     enum Task {
@@ -1310,6 +1347,14 @@ public class OneClick50Fm extends Script {
 
     public void initConfiguration(UI ui) {
         this.stopAt50 = ui.isStopAt50Enabled();
+
+        this.selectedLocation = ui.getSelectedLocation();
+
+        if (this.selectedLocation == null) {
+            this.selectedLocation = ScriptLocation.CRAFTING_GUILD;
+        }
+
+        log("CONFIG", "Location Selected: " + this.selectedLocation);
         log("CONFIG", "Stop at Level 50: " + this.stopAt50);
     }
 
@@ -1341,7 +1386,7 @@ public class OneClick50Fm extends Script {
 
         int x = 15, y = 35;
         int panelW = 320;
-        int panelH = 290;
+        int panelH = 300;
         int padding = 15;
 
         int COL_BG = new Color(12, 12, 18, 240).getRGB();
@@ -1360,10 +1405,14 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.03", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.04", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
+        cursorY += 20;
+
+        String locName = (selectedLocation != null) ? selectedLocation.toString() : "Unknown";
+        drawRow(c, "Location:", locName, x + padding, x + 110, cursorY, COL_LABEL, Color.CYAN.getRGB(), fontBold);
         cursorY += 20;
 
         String taskName = (task != null) ? task.name() : "IDLE";
@@ -1403,6 +1452,7 @@ public class OneClick50Fm extends Script {
         cursorY += sectionH + 5;
 
         drawSkillBar(c, "WOODCUTTING", wcLvl, wcRate, wcTTL, wcProg, new Color(0, 180, 60).getRGB(), iconWc, x + padding, cursorY, panelW - (padding * 2), sectionH);
+        drawGlobalStatsPanel(c, x + panelW + 10, y);
     }
 
     private void drawSkillBar(Canvas c, String skillName, int level, String rightText, String bottomText, int progressPercent, int barColor, com.osmb.api.visual.image.Image icon, int x, int y, int w, int h) {
@@ -1450,6 +1500,54 @@ public class OneClick50Fm extends Script {
             drawCenteredText(c, progStr, contentX + (contentW / 2), barY + 13, fontBar, Color.WHITE.getRGB());
         }
         c.drawText(bottomText, contentX, barY + barH + 12, Color.LIGHT_GRAY.getRGB(), fontBottom);
+    }
+
+    private void drawGlobalStatsPanel(Canvas c, int x, int y) {
+        int w = 200;
+        int h = 170;
+
+        int COL_BG = new Color(12, 12, 18, 240).getRGB();
+        int COL_BORDER = new Color(255, 165, 0, 200).getRGB();
+        int COL_TITLE = new Color(255, 165, 0).getRGB();
+        int COL_VAL = Color.WHITE.getRGB();
+
+        c.fillRect(x, y, w, h, COL_BG);
+        c.drawRect(x, y, w, h, COL_BORDER);
+
+        Font fontTitle = new Font("Impact", Font.ITALIC, 16);
+        Font fontData = new Font("Arial", Font.BOLD, 12);
+
+        drawCenteredText(c, "GLOBAL STATS", x + (w/2), y + 20, fontTitle, COL_TITLE);
+        c.drawLine(x + 10, y + 25, x + w - 10, y + 25, Color.GRAY.getRGB());
+
+        int curY = y + 45;
+        int gap = 22;
+        int pad = 10;
+        int valX = x + 110;
+
+        c.drawText("Active users:", x + pad, curY, Color.GREEN.getRGB(), fontData);
+
+        c.drawText(GlobalStatsManager.activeUsers, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Total Time:", x + pad, curY, new Color(0, 191, 255).getRGB(), fontData);
+        c.drawText(GlobalStatsManager.globalRuntime, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global FM XP:", x + pad, curY, new Color(255, 69, 0).getRGB(), fontData);
+        c.drawText(GlobalStatsManager.globalFm, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global WC XP:", x + pad, curY, new Color(34, 139, 34).getRGB(), fontData);
+        c.drawText(GlobalStatsManager.globalWc, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Lvl 50 Reached:", x + pad, curY, new Color(255, 215, 0).getRGB(), fontData);
+        c.drawText(GlobalStatsManager.reached50, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Fav Zone:", x + pad, curY, new Color(255, 105, 180).getRGB(), fontData);
+        c.drawText(GlobalStatsManager.favZone, valX, curY, COL_VAL, fontData);
     }
 
     private void drawRow(Canvas c, String label, String value, int xL, int xV, int y, int colL, int colV, Font f) {

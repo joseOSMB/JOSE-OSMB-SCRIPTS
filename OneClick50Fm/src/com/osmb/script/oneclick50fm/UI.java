@@ -1,6 +1,7 @@
 package com.osmb.script.oneclick50fm;
 
 
+import com.osmb.script.oneclick50fm.data.ScriptLocation;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
@@ -17,6 +18,7 @@ public class UI extends VBox {
     private final OneClick50Fm ctx;
     private final String SETTINGS_PATH = System.getProperty("user.home") + File.separator + "OneClick50FM_Settings.properties";
     private CheckBox stopAt50Check;
+    private ComboBox<ScriptLocation> locationSelector;
 
     public UI(OneClick50Fm script) {
         this.ctx = script;
@@ -49,13 +51,19 @@ public class UI extends VBox {
     private Node buildMainSettings() {
         VBox container = new VBox(10);
 
+        Label lblLoc = new Label("Select Location:");
+        lblLoc.setStyle("-fx-text-fill: white; -fx-font-size: 12;");
+
+        this.locationSelector = new ComboBox<>();
+        this.locationSelector.getItems().addAll(ScriptLocation.values());
+        this.locationSelector.getSelectionModel().select(ScriptLocation.CRAFTING_GUILD); // Default
+        this.locationSelector.setMaxWidth(Double.MAX_VALUE);
+
         this.stopAt50Check = new CheckBox("Stop at Level 50 Firemaking?");
         this.stopAt50Check.setStyle("-fx-text-fill: white; -fx-font-size: 12;");
+        this.stopAt50Check.setTooltip(new Tooltip("If checked, the script will logout/stop when FM level reaches 50."));
 
-        Tooltip tp = new Tooltip("If checked, the script will logout/stop when FM level reaches 50.");
-        this.stopAt50Check.setTooltip(tp);
-
-        container.getChildren().add(this.stopAt50Check);
+        container.getChildren().addAll(lblLoc, this.locationSelector, this.stopAt50Check);
         return container;
     }
 
@@ -73,23 +81,25 @@ public class UI extends VBox {
         return this.stopAt50Check.isSelected();
     }
 
+    public ScriptLocation getSelectedLocation() {
+        return this.locationSelector.getSelectionModel().getSelectedItem();
+    }
+
     private void saveSettings() {
         try (OutputStream output = new FileOutputStream(SETTINGS_PATH)) {
             Properties prop = new Properties();
-
             prop.setProperty("stopAt50", String.valueOf(this.stopAt50Check.isSelected()));
 
-            prop.store(output, "OneClick50FM Configuration");
+            prop.setProperty("locationIdx", String.valueOf(this.locationSelector.getSelectionModel().getSelectedIndex()));
 
+            prop.store(output, "OneClick50FM Configuration");
         } catch (IOException io) {
             io.printStackTrace();
-            System.out.println("Error saving settings: " + io.getMessage());
         }
     }
 
     private void loadSettings() {
         File file = new File(SETTINGS_PATH);
-
         if (!file.exists()) return;
 
         try (InputStream input = new FileInputStream(file)) {
@@ -97,11 +107,17 @@ public class UI extends VBox {
             prop.load(input);
 
             if (prop.getProperty("stopAt50") != null) {
-                boolean isSelected = Boolean.parseBoolean(prop.getProperty("stopAt50"));
-                this.stopAt50Check.setSelected(isSelected);
+                this.stopAt50Check.setSelected(Boolean.parseBoolean(prop.getProperty("stopAt50")));
             }
 
-        } catch (IOException ex) {
+            if (prop.getProperty("locationIdx") != null) {
+                int idx = Integer.parseInt(prop.getProperty("locationIdx"));
+                if(idx >= 0 && idx < this.locationSelector.getItems().size()) {
+                    this.locationSelector.getSelectionModel().select(idx);
+                }
+            }
+
+        } catch (Exception ex) {
             ex.printStackTrace();
         }
     }
