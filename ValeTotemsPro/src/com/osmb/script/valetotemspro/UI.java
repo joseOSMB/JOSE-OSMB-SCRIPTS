@@ -322,13 +322,11 @@ public class UI extends VBox {
 
                     if (prod != null && !log.equals("Redwood Logs")) productSelector.setValue(prod);
 
-                    // Cargar CheckBoxes desde la lista separada por comas
                     if (preMadeItemsList != null && !preMadeItemsList.isEmpty()) {
                         String[] parts = preMadeItemsList.split(",");
                         Set<Integer> loadedIds = new HashSet<>();
                         for (String p : parts) loadedIds.add(Integer.parseInt(p));
 
-                        // Actualizar UI
                         for (Map.Entry<Integer, CheckBox> entry : premadeCheckboxesMap.entrySet()) {
                             entry.getValue().setSelected(loadedIds.contains(entry.getKey()));
                         }
@@ -339,4 +337,5 @@ public class UI extends VBox {
     }
 
 }
+
 
