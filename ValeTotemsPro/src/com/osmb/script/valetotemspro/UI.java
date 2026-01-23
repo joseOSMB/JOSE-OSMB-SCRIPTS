@@ -210,10 +210,8 @@ public class UI extends VBox {
             for (Map.Entry<String, Integer> entry : items.entrySet()) {
                 CheckBox cb = new CheckBox(entry.getKey());
                 cb.setStyle("-fx-text-fill: white;");
-                // Seleccionar el primero por defecto (generalmente u longbow)
-                if (premadeCheckboxesMap.isEmpty()) cb.setSelected(true);
 
-                // Agregar ID al mapa para recuperarlo luego
+                if (premadeCheckboxesMap.isEmpty()) cb.setSelected(true);
                 premadeCheckboxesMap.put(entry.getValue(), cb);
                 premadeItemsContainer.getChildren().add(cb);
             }
@@ -224,7 +222,6 @@ public class UI extends VBox {
         List<Integer> selected = new ArrayList<>();
         if (!preMadeCheckBox.isSelected()) return selected;
 
-        // Iterar en el orden de inserción (LinkedHashMap mantiene el orden visual)
         for (Map.Entry<Integer, CheckBox> entry : premadeCheckboxesMap.entrySet()) {
             if (entry.getValue().isSelected()) {
                 selected.add(entry.getKey());
@@ -295,7 +292,6 @@ public class UI extends VBox {
 
     public String getSelectedPreMadeItemName() {
         if (!preMadeCheckBox.isSelected()) return "None";
-        // Devuelve una lista resumida (ej: "Shortbow (u), Longbow...")
         List<String> names = new ArrayList<>();
         for (Map.Entry<Integer, CheckBox> entry : premadeCheckboxesMap.entrySet()) {
             if (entry.getValue().isSelected()) names.add(entry.getValue().getText());
@@ -343,3 +339,4 @@ public class UI extends VBox {
     }
 
 }
+
