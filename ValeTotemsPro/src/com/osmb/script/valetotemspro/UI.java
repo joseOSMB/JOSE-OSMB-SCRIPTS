@@ -27,10 +27,8 @@ public class UI extends VBox {
     private CheckBox preMadeCheckBox;
     private CheckBox fletchKnifeCheckBox;
 
-    // --- CAMBIO: Contenedor para CheckBoxes múltiples ---
     private VBox premadeItemsContainer;
     private final Map<Integer, CheckBox> premadeCheckboxesMap = new LinkedHashMap<>();
-    // ---------------------------------------------------
 
     private final Map<String, Integer> logMap = new LinkedHashMap<>();
     private final Map<String, int[]> productIdsMap = new HashMap<>();
@@ -143,7 +141,6 @@ public class UI extends VBox {
         productSelector.setStyle("-fx-base: #485460; -fx-text-fill: white; -fx-font-size: 13;");
         prodBox.getChildren().addAll(lblProd, productSelector);
 
-        // --- PRE-MADE BOX MODIFICADO ---
         VBox preMadeBox = new VBox(10);
         preMadeBox.setStyle("-fx-padding: 10; -fx-border-color: #ff9f43; -fx-border-width: 1; -fx-border-radius: 5; -fx-background-color: rgba(255, 159, 67, 0.05);");
 
@@ -160,7 +157,6 @@ public class UI extends VBox {
         lblPreMadeItem.visibleProperty().bind(preMadeCheckBox.selectedProperty());
         lblPreMadeItem.managedProperty().bind(preMadeCheckBox.selectedProperty());
 
-        // Contenedor Scrollable para los checkboxes
         premadeItemsContainer = new VBox(5);
         ScrollPane scrollPane = new ScrollPane(premadeItemsContainer);
         scrollPane.setFitToWidth(true);
@@ -170,7 +166,6 @@ public class UI extends VBox {
         scrollPane.managedProperty().bind(preMadeCheckBox.selectedProperty());
 
         preMadeBox.getChildren().addAll(preMadeCheckBox, fletchKnifeCheckBox, lblPreMadeItem, scrollPane);
-        // -------------------------------
 
         basketCheckBox = new CheckBox("Use Log Basket (Forestry)");
         basketCheckBox.setStyle("-fx-text-fill: #d2dae2; -fx-font-size: 12;");
@@ -225,7 +220,6 @@ public class UI extends VBox {
         }
     }
 
-    // --- NUEVO: Obtener lista de IDs seleccionados en orden ---
     public List<Integer> getSelectedPreMadeItemIDs() {
         List<Integer> selected = new ArrayList<>();
         if (!preMadeCheckBox.isSelected()) return selected;
@@ -290,7 +284,6 @@ public class UI extends VBox {
         props.setProperty("knifeEquipped", String.valueOf(fletchKnifeCheckBox.isSelected()));
         props.setProperty("useBasket", String.valueOf(basketCheckBox.isSelected()));
 
-        // Guardar lista de IDs como String (ej: "859,861,25620")
         List<Integer> ids = getSelectedPreMadeItemIDs();
         if (!ids.isEmpty()) {
             String joined = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
@@ -348,4 +341,5 @@ public class UI extends VBox {
             } catch (Exception e) {}
         }
     }
+
 }
