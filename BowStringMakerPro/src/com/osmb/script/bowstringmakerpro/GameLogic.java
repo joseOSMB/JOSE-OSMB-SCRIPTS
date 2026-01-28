@@ -45,6 +45,7 @@ public class GameLogic {
 
     private static final RectangleArea WORK_AREA = new RectangleArea(2710, 3470, 6, 3, 1);
 
+    private boolean isCrafting = false;
     private long lastAnimationTime = 0;
 
     private long lastXpCheckTime = System.currentTimeMillis();
@@ -191,10 +192,7 @@ public class GameLogic {
         int emptySlots = getEmptySlots();
 
         if (flaxCount > 0) {
-            long timeSinceAnim = System.currentTimeMillis() - lastAnimationTime;
-            boolean isAnimating = ctx.getPixelAnalyzer().isPlayerAnimating(0.1);
-
-            if (isAnimating || timeSinceAnim < 4000) {
+            if (isCrafting) {
                 return CurrentTask.WAITING_FOR_FINISH;
             }
 
@@ -205,8 +203,11 @@ public class GameLogic {
             return CurrentTask.SPIN_FLAX;
         }
 
-        if (flaxCount == 0 && emptySlots >= 25) {
-            return CurrentTask.UNPACK_BALE;
+        if (flaxCount == 0) {
+            isCrafting = false;
+            if (emptySlots >= 25) {
+                return CurrentTask.UNPACK_BALE;
+            }
         }
 
         return null;
@@ -249,6 +250,7 @@ public class GameLogic {
 
             ctx.pollFramesUntil(() -> false, 350, false);
         }
+        isCrafting = false;
     }
 
     private void handleUnpack() {
@@ -291,6 +293,8 @@ public class GameLogic {
 
         if (ctx.getWidgetManager().getDialogue().selectItem(BOW_STRING_PRODUCT_ID)) {
             lastAnimationTime = System.currentTimeMillis();
+
+            isCrafting = true;
 
             log("System", "Selection made.");
 
