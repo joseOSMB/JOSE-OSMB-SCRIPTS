@@ -25,15 +25,12 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.SearchableImage;
 import com.osmb.api.walker.WalkConfig;
-import com.osmb.script.oneclick50fm.data.GlobalStatsManager;
 import com.osmb.script.oneclick50fm.data.Tree;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.utils.timing.Stopwatch;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.chatbox.ChatboxFilterTab;
-import com.osmb.api.profile.WorldProvider;
-import com.osmb.api.profile.ProfileManager;
 import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.location.area.Area;
 
@@ -54,8 +51,13 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import com.osmb.script.oneclick50fm.data.ScriptLocation;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.04, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.05, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
+
+    private String localUser = "Unknown";
+    private int hasReachedLevel50 = 0;
+    private final Object lock = new Object(); // El candado
+    private boolean reportSent = false;
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
     public static final int[] LOGS = new int[]{ItemID.LOGS, ItemID.OAK_LOGS, ItemID.WILLOW_LOGS,};
@@ -90,7 +92,7 @@ public class OneClick50Fm extends Script {
 
     private final SkillTracker wcTracker;
     private final SkillTracker fmTracker;
-    private GlobalStatsManager globalStats;
+
 
     private final Map<String, com.osmb.api.visual.image.Image> paintImages = new HashMap<>();
     private boolean initialLevelsChecked = false;
@@ -109,7 +111,7 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
     private boolean stopAt50 = false;
-    private final String scriptVersion = "1.04";
+    private final String scriptVersion = "1.05";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
@@ -122,18 +124,35 @@ public class OneClick50Fm extends Script {
 
     @Override
     public void onStart() {
-
+        synchronized (lock) { reportSent = false; }
+        GlobalStatsTracker.stopTracking("Unknown", null);
         if (!checkForUpdates()) {
             log("SYSTEM", "Outdated version.");
             stop();
             return;
         }
-        globalStats = new GlobalStatsManager();
-        globalStats.start();
+
+        String rawUser = getDiscordUsername();
+        this.localUser = (rawUser != null && !rawUser.isEmpty()) ? rawUser : "Unknown";
 
         UI ui = new UI(this);
         javafx.scene.Scene scene = new javafx.scene.Scene(ui);
         this.getStageController().show(scene, "OneClick50FM Settings", true);
+    }
+
+    @Override
+    public boolean stopped() {
+        if (super.stopped()) {
+            // --- BLOQUE DE SEGURIDAD AÑADIDO ---
+            synchronized (lock) {
+                if (reportSent) return true; // Si ya se envió, NO HACER NADA
+                GlobalStatsTracker.stopTracking(this.localUser, this);
+                reportSent = true; // Marcar como enviado
+            }
+            // -----------------------------------
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -144,17 +163,6 @@ public class OneClick50Fm extends Script {
 
     @Override
     public int poll() {
-        if (globalStats != null) {
-            long rTime = System.currentTimeMillis() - startTime;
-            long wXp = (wcTracker != null && wcTracker.getTracker() != null) ? (long) wcTracker.getTracker().getXpGained() : 0;
-            long fXp = (fmTracker != null && fmTracker.getTracker() != null) ? (long) fmTracker.getTracker().getXpGained() : 0;
-
-            int currentFmLevel = (fmTracker != null && fmTracker.getTracker() != null) ? fmTracker.getTracker().getLevel() : cachedFmLevel;
-
-            String locName = (selectedLocation != null) ? selectedLocation.toString() : "Unknown";
-
-            globalStats.updateLocalData(rTime, wXp, fXp, currentFmLevel, locName);
-        }
 
         if (this.stopAt50) {
             int currentLevel = 0;
@@ -165,7 +173,9 @@ public class OneClick50Fm extends Script {
             if (currentLevel == 0) currentLevel = cachedFmLevel;
 
             if (currentLevel >= 50) {
-                log("SYSTEM", "Level 50 Firemaking reached! Stopping script as requested.");
+                log("SYSTEM", "Level 50 Firemaking reached! Marking completion & stopping.");
+
+                this.hasReachedLevel50 = 1;
                 stop();
                 return 0;
             }
@@ -195,16 +205,6 @@ public class OneClick50Fm extends Script {
         }
         executeTask(task);
         return 0;
-    }
-    @Override
-    public boolean stopped() {
-        if (super.stopped()) {
-            if (globalStats != null) {
-                globalStats.stop();
-            }
-            return true;
-        }
-        return false;
     }
 
     private Task decideTask(WorldPosition worldPosition) {
@@ -761,24 +761,6 @@ public class OneClick50Fm extends Script {
         );
     }
 
-    private void hopWorlds() {
-        ProfileManager pm = getProfileManager();
-        if (pm == null) {
-            log(getClass().getSimpleName(), "ProfileManager null; Can't hop.");
-            return;
-        }
-        if (!pm.hasHopProfile()) {
-            log(getClass().getSimpleName(), "No hop profile set; select one first.");
-            return;
-        }
-
-        WorldProvider provider = worlds -> {
-            if (worlds == null || worlds.isEmpty()) return null;
-            return worlds.get(0);
-        };
-
-        pm.forceHop(provider);
-    }
 
     private boolean isDialogueVisible() {
         return getWidgetManager().getDialogue().getDialogueType() == DialogueType.ITEM_OPTION;
@@ -1072,15 +1054,14 @@ public class OneClick50Fm extends Script {
 
     private void onNewChatBoxMessage(List<String> newLines) {
         for (String line : newLines) {
-            String l = line.toLowerCase();
-            log("Chatbox listener", "New line: " + line);
             if (line.endsWith("further away.")) {
-                hopWorlds();
-                bonfirePosition = null;
-            } else if (line.endsWith("light a fire here.")) {
+                log(getClass().getSimpleName(), "Spot taken! Moving to new position...");
                 forceNewPosition = true;
                 bonfirePosition = null;
-
+            }
+            else if (line.endsWith("light a fire here.")) {
+                forceNewPosition = true;
+                bonfirePosition = null;
             }
         }
     }
@@ -1354,8 +1335,11 @@ public class OneClick50Fm extends Script {
             this.selectedLocation = ScriptLocation.CRAFTING_GUILD;
         }
 
+        GlobalStatsTracker.startTracking(this.localUser, this);
+
         log("CONFIG", "Location Selected: " + this.selectedLocation);
         log("CONFIG", "Stop at Level 50: " + this.stopAt50);
+        log("SYSTEM", "Tracking started for user: " + this.localUser);
     }
 
     @Override
@@ -1413,7 +1397,7 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.04", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.05", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
@@ -1460,7 +1444,61 @@ public class OneClick50Fm extends Script {
         cursorY += sectionH + 5;
 
         drawSkillBar(c, "WOODCUTTING", wcLvl, wcRate, wcTTL, wcProg, new Color(0, 180, 60).getRGB(), iconWc, x + padding, cursorY, panelW - (padding * 2), sectionH);
-        drawGlobalStatsPanel(c, x + panelW + 10, y);
+
+        drawGlobalStatsPanel(c, x + 330, y);
+    }
+
+    private void drawGlobalStatsPanel(Canvas c, int x, int y) {
+        int w = 210;
+        int h = 180;
+
+        int COL_BG = new Color(12, 12, 18, 240).getRGB();
+        int COL_BORDER = new Color(255, 165, 0, 200).getRGB();
+        int COL_TITLE = new Color(255, 165, 0).getRGB();
+        int COL_VAL = Color.WHITE.getRGB();
+
+        c.fillRect(x, y, w, h, COL_BG);
+        c.drawRect(x, y, w, h, COL_BORDER);
+
+        java.awt.Font fontTitle = new java.awt.Font("Impact", java.awt.Font.ITALIC, 16);
+        java.awt.Font fontData = new java.awt.Font("Arial", java.awt.Font.BOLD, 12);
+
+        drawCenteredText(c, "GLOBAL STATS", x + (w/2), y + 20, fontTitle, COL_TITLE);
+        c.drawLine(x + 10, y + 25, x + w - 10, y + 25, Color.GRAY.getRGB());
+
+        int curY = y + 45;
+        int gap = 20;
+        int pad = 10;
+        int valX = x + 115;
+
+        c.drawText("Active accounts:", x + pad, curY, Color.GREEN.getRGB(), fontData);
+        c.drawText(String.valueOf(GlobalStatsTracker.globalActiveUsers), valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global Hits 50:", x + pad, curY, new Color(255, 215, 0).getRGB(), fontData);
+        c.drawText(String.valueOf(GlobalStatsTracker.globalHits50), valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global XP/Hr:", x + pad, curY, new Color(255, 105, 180).getRGB(), fontData); // Color Rosa/Magenta para resaltar
+        c.drawText(formatBigNumber(GlobalStatsTracker.globalAvgXpHr), valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Fav Location:", x + pad, curY, new Color(255, 140, 0).getRGB(), fontData);
+        String favLoc = GlobalStatsTracker.globalFavLocation;
+        if(favLoc.length() > 14) favLoc = favLoc.substring(0, 14) + ".";
+        c.drawText(favLoc, valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global FM XP:", x + pad, curY, new Color(255, 60, 0).getRGB(), fontData);
+        c.drawText(formatBigNumber(GlobalStatsTracker.globalFmXp), valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Global WC XP:", x + pad, curY, new Color(0, 180, 60).getRGB(), fontData);
+        c.drawText(formatBigNumber(GlobalStatsTracker.globalWcXp), valX, curY, COL_VAL, fontData);
+        curY += gap;
+
+        c.drawText("Total Time:", x + pad, curY, new Color(0, 191, 255).getRGB(), fontData);
+        c.drawText(formatGlobalTime(GlobalStatsTracker.globalTotalRuntime), valX, curY, COL_VAL, fontData);
     }
 
     private void drawSkillBar(Canvas c, String skillName, int level, String rightText, String bottomText, int progressPercent, int barColor, com.osmb.api.visual.image.Image icon, int x, int y, int w, int h) {
@@ -1510,52 +1548,25 @@ public class OneClick50Fm extends Script {
         c.drawText(bottomText, contentX, barY + barH + 12, Color.LIGHT_GRAY.getRGB(), fontBottom);
     }
 
-    private void drawGlobalStatsPanel(Canvas c, int x, int y) {
-        int w = 200;
-        int h = 170;
+    private String formatGlobalTime(long ms) {
+        if (ms == 0) return "0s";
+        long seconds = ms / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+        long days = hours / 24;
+        long years = days / 365;
 
-        int COL_BG = new Color(12, 12, 18, 240).getRGB();
-        int COL_BORDER = new Color(255, 165, 0, 200).getRGB();
-        int COL_TITLE = new Color(255, 165, 0).getRGB();
-        int COL_VAL = Color.WHITE.getRGB();
+        if (years > 0) return years + "y " + (days % 365) + "d";
+        if (days > 0) return days + "d " + (hours % 24) + "h";
+        if (hours > 0) return hours + "h " + (minutes % 60) + "m";
+        return (minutes % 60) + "m " + (seconds % 60) + "s";
+    }
 
-        c.fillRect(x, y, w, h, COL_BG);
-        c.drawRect(x, y, w, h, COL_BORDER);
-
-        Font fontTitle = new Font("Impact", Font.ITALIC, 16);
-        Font fontData = new Font("Arial", Font.BOLD, 12);
-
-        drawCenteredText(c, "GLOBAL STATS", x + (w/2), y + 20, fontTitle, COL_TITLE);
-        c.drawLine(x + 10, y + 25, x + w - 10, y + 25, Color.GRAY.getRGB());
-
-        int curY = y + 45;
-        int gap = 22;
-        int pad = 10;
-        int valX = x + 110;
-
-        c.drawText("Active users:", x + pad, curY, Color.GREEN.getRGB(), fontData);
-
-        c.drawText(GlobalStatsManager.activeUsers, valX, curY, COL_VAL, fontData);
-        curY += gap;
-
-        c.drawText("Total Time:", x + pad, curY, new Color(0, 191, 255).getRGB(), fontData);
-        c.drawText(GlobalStatsManager.globalRuntime, valX, curY, COL_VAL, fontData);
-        curY += gap;
-
-        c.drawText("Global FM XP:", x + pad, curY, new Color(255, 69, 0).getRGB(), fontData);
-        c.drawText(GlobalStatsManager.globalFm, valX, curY, COL_VAL, fontData);
-        curY += gap;
-
-        c.drawText("Global WC XP:", x + pad, curY, new Color(34, 139, 34).getRGB(), fontData);
-        c.drawText(GlobalStatsManager.globalWc, valX, curY, COL_VAL, fontData);
-        curY += gap;
-
-        c.drawText("Lvl 50 Reached:", x + pad, curY, new Color(255, 215, 0).getRGB(), fontData);
-        c.drawText(GlobalStatsManager.reached50, valX, curY, COL_VAL, fontData);
-        curY += gap;
-
-        c.drawText("Fav Zone:", x + pad, curY, new Color(255, 105, 180).getRGB(), fontData);
-        c.drawText(GlobalStatsManager.favZone, valX, curY, COL_VAL, fontData);
+    private String formatBigNumber(long num) {
+        if (num >= 1_000_000_000) return String.format("%.2fB", num / 1_000_000_000.0);
+        if (num >= 1_000_000) return String.format("%.2fM", num / 1_000_000.0);
+        if (num >= 1_000) return String.format("%.1fk", num / 1_000.0);
+        return String.valueOf(num);
     }
 
     private void drawRow(Canvas c, String label, String value, int xL, int xV, int y, int colL, int colV, Font f) {
@@ -1604,6 +1615,31 @@ public class OneClick50Fm extends Script {
         long minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60;
         long seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    public int getHasReachedLevel50() {
+        return this.hasReachedLevel50;
+    }
+
+    public String getLogName() {
+        if (this.selectedLocation == null) {
+            return "Unknown";
+        }
+        return this.selectedLocation.toString();
+    }
+
+    public int GetWcXpGained() {
+        if (wcTracker != null && wcTracker.getTracker() != null) {
+            return (int) wcTracker.getTracker().getXpGained();
+        }
+        return 0;
+    }
+
+    public int GetFmXpGained() {
+        if (fmTracker != null && fmTracker.getTracker() != null) {
+            return (int) fmTracker.getTracker().getXpGained();
+        }
+        return 0;
     }
 
     public static int compareVersions(String v1, String v2) {
