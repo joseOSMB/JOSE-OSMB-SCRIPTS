@@ -56,7 +56,7 @@ public class OneClick50Fm extends Script {
 
     private String localUser = "Unknown";
     private int hasReachedLevel50 = 0;
-    private final Object lock = new Object(); // El candado
+    private final Object lock = new Object();
     private boolean reportSent = false;
 
     static final long BLACKLIST_TIMEOUT = TimeUnit.SECONDS.toMillis(10);
@@ -143,13 +143,12 @@ public class OneClick50Fm extends Script {
     @Override
     public boolean stopped() {
         if (super.stopped()) {
-            // --- BLOQUE DE SEGURIDAD AÑADIDO ---
             synchronized (lock) {
-                if (reportSent) return true; // Si ya se envió, NO HACER NADA
+                if (reportSent) return true;
                 GlobalStatsTracker.stopTracking(this.localUser, this);
-                reportSent = true; // Marcar como enviado
+                reportSent = true;
             }
-            // -----------------------------------
+
             return true;
         }
         return false;
@@ -1479,7 +1478,7 @@ public class OneClick50Fm extends Script {
         c.drawText(String.valueOf(GlobalStatsTracker.globalHits50), valX, curY, COL_VAL, fontData);
         curY += gap;
 
-        c.drawText("Global XP/Hr:", x + pad, curY, new Color(255, 105, 180).getRGB(), fontData); // Color Rosa/Magenta para resaltar
+        c.drawText("Global XP/Hr:", x + pad, curY, new Color(255, 105, 180).getRGB(), fontData);
         c.drawText(formatBigNumber(GlobalStatsTracker.globalAvgXpHr), valX, curY, COL_VAL, fontData);
         curY += gap;
 
