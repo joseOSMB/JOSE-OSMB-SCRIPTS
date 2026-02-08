@@ -51,7 +51,7 @@ import java.util.regex.Pattern;
 import static com.osmb.api.utils.RandomUtils.uniformRandom;
 import com.osmb.script.oneclick50fm.data.ScriptLocation;
 
-@ScriptDefinition(name = "One Click 50FM", description = "1-50fm with one click", version = 1.05, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
+@ScriptDefinition(name = "One Click 50FM", threadUrl = "https://wiki.osmb.co.uk/article/one-click-50-fm", version = 1.06, author = "Jose", skillCategory = SkillCategory.FIREMAKING)
 public class OneClick50Fm extends Script {
 
     private String localUser = "Unknown";
@@ -111,7 +111,7 @@ public class OneClick50Fm extends Script {
     private boolean setZoom = false;
     private boolean firstBack = false;
     private boolean stopAt50 = false;
-    private final String scriptVersion = "1.05";
+    private final String scriptVersion = "1.06";
 
     public OneClick50Fm(Object scriptCore) {
         super(scriptCore);
@@ -1396,7 +1396,7 @@ public class OneClick50Fm extends Script {
         int cursorY = y + 55;
         long elapsed = System.currentTimeMillis() - startTime;
 
-        drawRow(c, "Version:", "v1.05", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
+        drawRow(c, "Version:", "v1.06", x + padding, x + 110, cursorY, COL_LABEL, new Color(255, 200, 50).getRGB(), fontBold);
         cursorY += 20;
 
         drawRow(c, "Runtime:", formatTime(elapsed), x + padding, x + 110, cursorY, COL_LABEL, COL_VALUE, fontBold);
