@@ -11,10 +11,10 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-@ScriptDefinition(name = "Vale Totems Pro", description = "Script for vale totems minigame", version = 2.02, author = "Jose", skillCategory = SkillCategory.FLETCHING)
+@ScriptDefinition(name = "Vale Totems Pro", threadUrl = "https://wiki.osmb.co.uk/article/vale-totems-pro-free-2", version = 2.03, author = "Jose", skillCategory = SkillCategory.FLETCHING)
 public class ValeTotemsPro extends Script {
 
-    private final String scriptVersion = "2.02";
+    private final String scriptVersion = "2.03";
     private GameLogic logic;
 
     private String localUser = "Unknown";
