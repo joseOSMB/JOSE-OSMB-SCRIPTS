@@ -10,7 +10,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-@ScriptDefinition(name = "Bow String Maker Pro", description = "Spins flax using the Bale of Flax method", version = 1.0, author = "Jose", skillCategory = SkillCategory.CRAFTING)
+@ScriptDefinition(name = "Bow String Maker Pro", threadUrl = "https://wiki.osmb.co.uk/article/bow-string-maker-pro-2", version = 1.1, author = "Jose", skillCategory = SkillCategory.CRAFTING)
 public class BowStringMakerPro extends Script {
 
     private final String scriptVersion = "1.0";
@@ -120,3 +120,4 @@ public class BowStringMakerPro extends Script {
         return 0;
     }
 }
+
